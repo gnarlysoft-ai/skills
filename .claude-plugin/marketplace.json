@@ -1,0 +1,15 @@
+{
+  "name": "gnarlysoft-ai",
+  "description": "Agent skills for the Workflow Engine.",
+  "owner": {
+    "name": "Gnarlysoft",
+    "url": "https://github.com/gnarlysoft-ai"
+  },
+  "plugins": [
+    {
+      "name": "workflow-engine",
+      "description": "Set up the Workflow Engine on a machine with your own AI agent: install, create a board, start its services, prove it with wf doctor.",
+      "source": "./"
+    }
+  ]
+}

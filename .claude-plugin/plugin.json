@@ -1,0 +1,11 @@
+{
+  "name": "workflow-engine",
+  "version": "0.1.0",
+  "description": "Agent skills for the Workflow Engine.",
+  "author": {
+    "name": "Gnarlysoft",
+    "url": "https://github.com/gnarlysoft-ai"
+  },
+  "repository": "https://github.com/gnarlysoft-ai/skills",
+  "license": "MIT"
+}
