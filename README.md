@@ -10,6 +10,15 @@ repository holds instructions only; it contains no engine code.
 You can [read SKILL.md on GitHub](https://github.com/gnarlysoft-ai/skills/blob/main/skills/workflow-engine-setup/SKILL.md)
 or fetch its [raw Markdown](https://raw.githubusercontent.com/gnarlysoft-ai/skills/main/skills/workflow-engine-setup/SKILL.md).
 
+## This repository is a mirror
+
+This repository is a published copy. The skills are maintained in the
+Workflow Engine repository and arrive here by pull request when an engine
+release changes one. Pull requests opened here by hand are welcome: a
+maintainer ports the change to the engine repository and closes the pull
+request here. Only the engine's sync pull requests are merged here, and the
+next sync overwrites any other change.
+
 ## Quickstart
 
 SSH into the machine, start your agent there, and paste this prompt:

@@ -23,24 +23,97 @@ own `wf doctor --onboarding`, never your own judgement.
 - **Never ask for a secret in the chat.** No token, password, API key or
   private key is typed into this conversation, echoed, logged or written by
   you. Step 5 gives the user a command they run themselves.
+- **Never print a config or credentials file**, whole or in part: an env file,
+  an MCP or agent CLI config, a `git diff` of one. "Keys only" through a text
+  filter (`sed`, `grep`, `awk`) counts as printing it: a filter that does not
+  match prints the secret, and the same filter behaves differently on macOS
+  and Linux. To learn what such a file holds, list its key names with a parser
+  (the block below these rules), never its lines. When that block refuses a
+  file, ask the user what it holds; do not read it another way.
+- **If you see a secret anyway, say so at once.** Name the file and the key,
+  never the value, and tell the user to rotate it. A token that reached this
+  conversation stays in its transcript.
 - **Ask before anything host-wide**: `sudo`, a package install, a systemd unit,
   a LaunchAgent. Show the command, say what it changes, then run it.
+- **Ask before a decision that is the user's**, at the step where it comes up
+  and not in one question at the end: installing the board's services (the
+  loop and dashboard units); which agent CLI (backend), models and effort the
+  lanes run on; turning on pollers or intake; making the dashboard writable;
+  and any install over about 500 MB, or any install at all while the disk is
+  more than 90% full. Say what it does and what it costs, then wait.
 - **Never touch another board.** If `wf` is already installed or the machine
   already has boards (`wf host --json` lists them), do not reinstall the
   engine, re-run its installer or restart its services. Tell the user what you
   found and ask how to proceed.
+- **Never read or copy from another board.** Not another board's config,
+  plugin or tasks, not the desktop app's `boards.json`, not shell history, not
+  another project's agent memory, and write nothing into any of them. This
+  board's values come from the user's answers and from this repository. The
+  one exception is a profile the user hands you (step 4).
 - **Stop at user steps.** Signing in to GitHub, signing in to the agent CLI and
   typing secrets are the user's. Say exactly what to run and wait.
+- **Keep the project plugin in a git repository the user owns.** It holds the
+  board's lane settings, so the user must be able to find, review and back it
+  up. Ask where it goes; never put it under an application-data or cache
+  directory, and never leave it untracked.
+- **Verify after-merge steps before you hand them over.** Any command you give
+  the user to run after a PR or a merge (`git switch`, `git pull`, a cleanup)
+  must be proven safe in this repository first: check what it would overwrite
+  or delete, local files git does not track included. A branch switch or a
+  pull can overwrite or delete a local file the two sides track differently
+  (a local `.mcp.json`, for one).
 - **Never say "done" on your own word.** Done means step 7 is green, or every
   remaining refusal is named with its fix.
+- **Report the outcome, not the mechanism.** The last thing you tell the user
+  is whether a task can run end to end on this board, or what stops it and who
+  owes the fix. "Services active" or "pollers ok" does not answer that.
 - **Report doctor verbatim.** Show each row's `detail` and `fix` as the engine
   wrote them.
+
+Listing the key names of a config file without printing a value. It reads
+JSON, and a file in which every line is one plain `NAME=VALUE` (blank and `#`
+lines apart). It refuses anything else (TOML, YAML, INI, JSON that does not
+parse, a value that runs over several lines, a `NAME=` with nothing after it):
+it exits 1 and shows nothing from the file, because guessing at the format is
+how a value gets printed.
+
+```bash
+python3 - path/to/file <<'PY'
+import json, re, sys
+text = open(sys.argv[1]).read()
+# One assignment on one line: the value is quoted and closed, or has no quote and no backslash.
+# A bare value is never empty and never starts with "=": a token padded with "=" reads as NAME=.
+assignment = re.compile(r"""(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(?:"[^"]*"|'[^']*'|[^"'\\=][^"'\\]*)""")
+def json_names(value, prefix=""):
+    if isinstance(value, dict):
+        for key in value:
+            yield prefix + str(key)
+            yield from json_names(value[key], prefix + str(key) + ".")
+def line_names(text):
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            found = assignment.fullmatch(line)
+            if not found:
+                sys.exit(f"refused: line {number} is not one plain NAME=VALUE; nothing from this file is shown")
+            yield found.group(1)
+try:
+    names = list(json_names(json.loads(text)))
+except ValueError:  # not JSON: every line must be an assignment, or no name is printed
+    names = list(line_names(text))
+print("\n".join(names))
+PY
+```
 
 ## Before you start: one settings file
 
 Your shell may not keep variables between commands, so keep them in a file and
 start every command block with `. ~/.wf-setup.env`. It holds no secrets. Ask
-the user for the values you cannot detect; the defaults are fine for most.
+the user for the values you cannot detect. `MODEL` and `EFFORT` are empty on
+purpose: they decide what every task costs, so they are the user's answer,
+never your pick and never another board's values. The one exception is a
+profile the user hands you (step 4): its `toolkit.config.yaml` is then the
+answers file, and these two keys are not used.
 
 ```bash
 cat > ~/.wf-setup.env <<'EOF'
@@ -53,12 +126,16 @@ CHANNEL=desktop-beta
 # The repository the board works on, and the board's name (= the folder's name)
 REPO_DIR="$HOME/code/myproject"
 BOARD=myproject
-# Where the shared lanes and this board's project plugin live
+# Where the shared lanes and this board's project plugin live: a folder of the
+# user's (ask), never an application-data or cache directory
 PLUGINS_DIR="$HOME/wf-plugins"
 # The board's dashboard port on this machine (one port per board)
 PORT=8787
-# The model the lanes pass to the agent CLI (Claude Code: an alias such as sonnet or opus)
-MODEL=sonnet
+# The model and the reasoning effort the lanes pass to the agent CLI (Claude
+# Code: an alias such as sonnet or opus, a level such as medium or high).
+# Ask the user, then fill both in. Step 3c stops while either is empty.
+MODEL=
+EFFORT=
 export PATH="$HOME/.local/bin:$PATH"
 EOF
 ```
@@ -75,6 +152,7 @@ name of letters, digits, `-` and `_`.
 uname -s; uname -m
 for t in python3 git gh uv jq curl node npm claude codex gemini; do printf '%-8s ' "$t"; command -v "$t" || echo MISSING; done
 python3 -c 'import sys, yaml; print(sys.version.split()[0], "yaml ok")'
+df -h "$HOME"
 command -v wf && wf --version && wf host --json
 ```
 
@@ -86,6 +164,9 @@ What the engine needs on `PATH`:
 | `git`, `gh`, `uv`, `jq`, `curl` | install, updates, the extension store |
 | `node`, `npm` | three shared lanes declare them in `requires.tools` |
 | the agent CLI the lanes run on | see below |
+
+The `df` line says how full the disk is. Above 90%, or before any install that
+takes more than about 500 MB (a large `node_modules` does), stop and ask.
 
 Install what is missing (ask first; these need `sudo`):
 
@@ -116,7 +197,8 @@ Install what is missing (ask first; these need `sudo`):
 fetched them, `grep -hoE '^\s+backend: [a-z]+' "$PLUGINS_DIR"/wf-toolkit/reference/workflows/*.yaml | sort | uniq -c`
 says which. Today that is Claude Code
 (`curl -fsSL https://claude.ai/install.sh | bash`; see its docs if that
-fails). Install it now; signing in is the user's, in step 5. If you are
+fails). Tell the user which CLI the lanes need and install it on their yes;
+signing in is the user's, in step 5. If you are
 Claude Code yourself, running on this machine as this user, it is already
 installed and signed in: `claude auth status` confirms it.
 
@@ -189,8 +271,13 @@ s = open(p).read()
 s = re.sub(r"(?m)^WF_CHANNEL=.*$", "WF_CHANNEL=" + sys.argv[1], s)
 s = re.sub(r"(?m)^WF_REPO=.*$", "WF_REPO=" + sys.argv[2], s)
 open(p, "w").write(s)
+# Read the two values back by key name. This file can hold tokens, so its
+# lines are never put through a text filter.
+for line in open(p).read().splitlines():
+    if line.split("=", 1)[0] in ("WF_CHANNEL", "WF_REPO"):
+        print(line)
 PY
-grep -E '^WF_(REPO|CHANNEL)=' /etc/workflow-engine/wf.env; ls -l /etc/workflow-engine/wf.env
+ls -l /etc/workflow-engine/wf.env
 ```
 
 The updater timer is turned on in step 6, after the board runs.
@@ -200,8 +287,8 @@ owned by this user, mode `-rw-r-----`.
 
 ### 2c. Install (macOS)
 
-The engine's macOS updater installs the channel's version when no `wf` exists,
-then keeps it current hourly. It is not shipped outside the wheel, so fetch it:
+The engine's macOS updater installs the channel's version when no `wf` exists.
+It is not shipped outside the wheel, so fetch it and run it once:
 
 ```bash
 . ~/.wf-setup.env
@@ -210,12 +297,22 @@ gh api "repos/$ENGINE_REPO/contents/deploy/wf-update-mac.sh?ref=main" -H "Accept
 chmod 0755 ~/wf-ops/wf-update-mac.sh
 WF_REPO="$ENGINE_REPO" WF_CHANNEL="$CHANNEL" /bin/bash ~/wf-ops/wf-update-mac.sh
 wf --version
-WF_REPO="$ENGINE_REPO" WF_CHANNEL="$CHANNEL" /bin/bash ~/wf-ops/wf-update-mac.sh --install   # hourly LaunchAgent
 ```
 
 Do not judge it by its exit code (it exits 0 when it cannot read the channel);
 judge it by `wf --version`. The updater acts on every board on the machine,
 which is why the rules forbid running it where boards already exist.
+
+The same script installs itself as an hourly LaunchAgent, which keeps the
+engine current after this chat ends. Ask first: say that it runs every hour and
+updates the engine for every board on this Mac, and install it only on the
+user's yes. Without it the engine stays at this version until someone runs the
+command above again.
+
+```bash
+. ~/.wf-setup.env
+WF_REPO="$ENGINE_REPO" WF_CHANNEL="$CHANNEL" /bin/bash ~/wf-ops/wf-update-mac.sh --install
+```
 
 **Verify**: `wf --version` prints `$VERSION`; the log is
 `~/Library/Logs/wf-update/update.log`.
@@ -281,9 +378,11 @@ answers file instead.
 ```bash
 . ~/.wf-setup.env
 BASE=$(git -C "$REPO_DIR" symbolic-ref --short refs/remotes/origin/HEAD | sed 's#^origin/##')
-python3 - "$PLUGINS_DIR/$BOARD.answers.json" "$BOARD" "$MODEL" "npm test" "$BASE" <<'PY'
+python3 - "$PLUGINS_DIR/$BOARD.answers.json" "$BOARD" "$MODEL" "npm test" "$BASE" "$EFFORT" <<'PY' &&
 import json, sys
-path, repo, model, test, base = sys.argv[1:6]
+path, repo, model, test, base, effort = (arg.strip() for arg in sys.argv[1:7])
+if not model or not effort:
+    sys.exit("MODEL or EFFORT is empty in ~/.wf-setup.env: ask the user, set both, run this block again")
 a = {
   "context_gathering_steps": "1. Read the repository README, and CLAUDE.md or AGENTS.md if there is one. 2. Read the files the task names, and the tests next to them.",
   "conventions_skill": "project-conventions",
@@ -295,7 +394,7 @@ a = {
   "test_command_rule": "use the repository's own documented test command (README, CLAUDE.md, CI config, package.json scripts.test or a Makefile), run from the repository root",
   "rollup_success_action": "transition the parent task to code-approved",
   "td_plan_docs_path": "docs/specs",
-  "effort_default": "high",
+  "effort_default": effort,
   "web_findings_repo": repo,
   "test_gate_command": test,
   "base_branch": base,
@@ -306,17 +405,24 @@ for k in ("model_default", "model_design", "model_minor_develop_reproduce", "mod
 json.dump(a, open(path, "w"), indent=2)   # JSON is YAML: --answers reads it with yaml.safe_load
 print("wrote", path)
 PY
-cd "$PLUGINS_DIR"
-wf plugin new "$BOARD" --plugins-dir "$PLUGINS_DIR" --answers "$PLUGINS_DIR/$BOARD.answers.json"
+cd "$PLUGINS_DIR" &&
+wf plugin new "$BOARD" --plugins-dir "$PLUGINS_DIR" --answers "$PLUGINS_DIR/$BOARD.answers.json" &&
 git -C "$PLUGINS_DIR/$BOARD" init -q -b main && git -C "$PLUGINS_DIR/$BOARD" add -A \
-  && git -C "$PLUGINS_DIR/$BOARD" commit -qm "Scaffold $BOARD"
+  && git -C "$PLUGINS_DIR/$BOARD" commit -qm "Scaffold $BOARD" &&
 wf assemble "$PLUGINS_DIR/$BOARD" --plugins-dir "$PLUGINS_DIR"
 ```
 
-(Replace `"npm test"` with the user's command before running.) If `wf assemble`
-names a missing key, read that key's description in
+(Replace `"npm test"` with the user's command before running.) Each command
+runs only if the one before it succeeded, so a refused answers file scaffolds
+nothing, even when an answers file from an earlier attempt is still there.
+
+If `wf assemble` names a missing key, read that key's description in
 `$PLUGINS_DIR/wf-toolkit/config.schema.yaml`, add a one-line value to
 `$PLUGINS_DIR/$BOARD/toolkit.config.yaml`, commit, and assemble again.
+
+The project plugin is now a git repository at `$PLUGINS_DIR/$BOARD`. It is the
+user's: tell them where it is, and offer to add a remote of theirs and push it.
+Pushing is their call.
 
 **Verify**: `Assembly OK … workflows validate.`
 
@@ -348,7 +454,9 @@ git -C "$REPO_DIR" status --porcelain
 **Verify**: `All plugins current.`, every workflow `OK`, `git status --porcelain`
 prints nothing, and `jq -r .repo_name "$REPO_DIR/.workflow/workspace.json"`
 prints `$BOARD`. (If `.claude/` was already tracked and the install changed a
-file in it, show the user the diff; never commit or stash it for them.)
+file in it, tell the user which files changed and let them read the diff in
+their own terminal: it can hold tokens, so it is never printed here. Never
+commit or stash it for them.)
 
 ## Step 4. Optional: copy settings from another machine (a profile)
 
@@ -421,8 +529,8 @@ wf_secret() {  # usage: wf_secret KEY FILE
 wf_secret GH_TOKEN "$HOME/code/myproject/.workflow/.env"   # example: KEY and the file doctor named
 ```
 
-Afterwards you may check that a key is present (`grep -c '^KEY=' FILE`), never
-print its value.
+Afterwards you may check that a key is present: list the file's key names with
+the block under the rules, which prints names and never a value.
 
 **Sign-ins.** The user also:
 
@@ -439,6 +547,22 @@ signed in. The secret rows are re-checked in step 7.
 The loop (dispatch plus the extension pollers) and the dashboard run as
 services whose entry point is the `wf` binary itself. Nothing is started
 before this step.
+
+**Ask first.** Tell the user what this step leaves running after this chat
+ends, and start it only on their yes:
+
+- the loop, which dispatches armed tasks and runs the extension pollers;
+- the dashboard, which starts writable: it saves settings and answers
+  checkpoints, and the configuration below posts to it. Say both sides. The
+  engine's own guidance for a machine that runs the loop is a read-only
+  dashboard (`WF_DASHBOARD_READONLY=1`), so that the loop is the only writer
+  of task files; its deploy guide says a writable dashboard beside the loop
+  "double-dispatches". A read-only dashboard refuses every change made from
+  it, approving a checkpoint included; those then go through the CLI
+  (`wf approve`). Which one the board keeps is the user's call, and "Read-only
+  dashboard" at the end of this step applies it;
+- the engine's self-updater: on Linux its timer is turned on in this step; on
+  macOS it was installed in step 2c, if the user said yes there.
 
 ### Linux (systemd)
 
@@ -567,6 +691,38 @@ claude plugin install superpowers@claude-plugins-official   # example: what the 
 until [ ! -e "$REPO_DIR/.workflow/.harness-check-request" ]; do sleep 2; done   # gone = re-checked
 ```
 
+### Read-only dashboard (only if the user chose it)
+
+Do this last. The two configuration blocks above post to the dashboard, and
+the user types an extension secret into its Extensions page (step 5); a
+read-only dashboard refuses both.
+
+On Linux, add the key to the board's env file and restart the unit, which
+reads that file on every start. The restart uses `sudo`: show it first.
+
+```bash
+. ~/.wf-setup.env
+printf 'WF_DASHBOARD_READONLY=1\n' >> "/etc/workflow-engine/projects/$BOARD.env"
+sudo systemctl restart "wf-dashboard@$BOARD"
+```
+
+On macOS, set the key in the dashboard's plist, then unload the job and load
+it again. A restart (`launchctl kickstart -k`) is not enough: launchd reads
+the plist when it loads the job, so a restarted dashboard keeps its old
+environment and stays writable.
+
+```bash
+. ~/.wf-setup.env
+DLABEL="local.wf.dashboard.$BOARD"
+plutil -replace EnvironmentVariables.WF_DASHBOARD_READONLY -string 1 ~/Library/LaunchAgents/$DLABEL.plist
+launchctl bootout "gui/$(id -u)/$DLABEL"
+while launchctl print "gui/$(id -u)/$DLABEL" >/dev/null 2>&1; do sleep 1; done   # bootout returns before the job is gone
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$DLABEL.plist
+```
+
+**Verify**: `curl -s "localhost:$PORT/api/settings" | jq .readonly` prints
+`true`.
+
 ## Step 7. Prove it
 
 ```bash
@@ -594,8 +750,8 @@ refusal is listed with its fix and who owes it. Known items:
 
 - `agent_cli` refuses until the user has signed in to the agent CLI as this
   user (step 5).
-- On macOS, engine issue #1195: `tools: flock` is refused on every Mac because
-  doctor matches the word in the toolkit's portable lock helper. Until a
+- On macOS, `tools: flock` is refused on every Mac because doctor matches the
+  word in the toolkit's portable lock helper, a known engine issue. Until a
   release fixes it, report that one row as known, not as a setup failure.
 - `push_access` refuses when the `gh` account cannot push to `origin`
   (step 3a). That is the user's to grant; the board cannot publish without it.
@@ -604,6 +760,12 @@ refusal is listed with its fix and who owes it. Known items:
   commit, then `wf assemble` and `wf plugin install "$PLUGINS_DIR/$BOARD" --repo "$REPO_DIR"`
   again. It warns when the repository has no `origin/HEAD`
   (`git -C "$REPO_DIR" remote set-head origin --auto`).
+
+**Then say what it means**, in one sentence: a task can run end to end on this
+board (armed, dispatched by the loop, worked by the agent CLI, published), or
+it cannot yet and what stops it. Doctor's rows are the evidence for that
+sentence; a list of healthy mechanisms is not the sentence. No task has run
+at this point, so say that as well: the first task the user arms is the proof.
 
 ## Reach the dashboard from your laptop
 
@@ -625,5 +787,5 @@ dashboard to a public address: a non-loopback bind needs
 | Engine | `~/.local/bin/wf` (Linux: moved under `~/.local/share/wf/versions/` by the first update) |
 | Box config (Linux) | `/etc/workflow-engine/wf.env`, `/etc/workflow-engine/projects/<BOARD>.env` |
 | Board | `$REPO_DIR/.workflow` (`settings.json`, `.env`, `.env.integrations`, `plugins.json`) |
-| Shared lanes and project plugin | `$PLUGINS_DIR/wf-toolkit`, `$PLUGINS_DIR/<BOARD>` (a local git repo) |
+| Shared lanes and project plugin | `$PLUGINS_DIR/wf-toolkit`, `$PLUGINS_DIR/<BOARD>` (a git repo the user owns) |
 | Logs | `journalctl -u wf-loop@<BOARD>`, `-u wf-dashboard@<BOARD>`, `-u wf-update`; macOS `~/Library/Logs/wf-update/` |
