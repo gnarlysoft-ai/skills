@@ -1,13 +1,15 @@
 # Workflow Engine agent skills
 
 Skills that let your own AI agent work with the Workflow Engine. This
-repository holds instructions only; it contains no engine code.
+repository holds instructions, plus one small example client in
+standard-library Python for the Board API; it contains no engine code.
 
 | Skill | Purpose |
 |---|---|
 | [workflow-engine-setup](skills/workflow-engine-setup/SKILL.md) | Set up the engine on a machine (a fresh Linux dev box or a Mac): install it, create a board for a repository, start its services and prove it with `wf doctor --onboarding` |
 | [workflow-engine-author](skills/workflow-engine-author/SKILL.md) | Change how the agents work on a board: customise its project plugin on top of the shared lanes, or add a workflow, and prove it with `wf assemble` before the install and `wf workflow check` and `wf doctor` after |
 | [learn-workflow-engine](skills/learn-workflow-engine/SKILL.md) | Run, debug and extend a board once the engine is installed: the mental model, the CLI, the workflow YAML, plugins, hooks, and why a task is not moving |
+| [wfe-integrate](skills/wfe-integrate/SKILL.md) | Connect your own app, script or AI tool to a Workflow Engine board through its Board API: pair with a one-use code, choose MCP, the event stream or webhooks, and prove it with a live event |
 
 You can read the setup skill [on GitHub](https://github.com/gnarlysoft-ai/skills/blob/main/skills/workflow-engine-setup/SKILL.md)
 or fetch its [raw Markdown](https://raw.githubusercontent.com/gnarlysoft-ai/skills/main/skills/workflow-engine-setup/SKILL.md).
@@ -48,9 +50,9 @@ claude plugin marketplace add gnarlysoft-ai/skills
 claude plugin install workflow-engine@gnarlysoft-ai
 ```
 
-The plugin carries all three skills. After a restart, Claude Code can also invoke
-them explicitly as `/workflow-engine:workflow-engine-setup`, `/workflow-engine:workflow-engine-author` and
-`/workflow-engine:learn-workflow-engine`.
+The plugin carries all four skills. After a restart, Claude Code can also invoke
+them explicitly as `/workflow-engine:workflow-engine-setup`, `/workflow-engine:workflow-engine-author`,
+`/workflow-engine:learn-workflow-engine` and `/workflow-engine:wfe-integrate`.
 
 ### Other agents, via skills.sh
 
@@ -58,6 +60,7 @@ them explicitly as `/workflow-engine:workflow-engine-setup`, `/workflow-engine:w
 npx skills add gnarlysoft-ai/skills --skill workflow-engine-setup
 npx skills add gnarlysoft-ai/skills --skill workflow-engine-author
 npx skills add gnarlysoft-ai/skills --skill learn-workflow-engine
+npx skills add gnarlysoft-ai/skills --skill wfe-integrate
 ```
 
 Select your agent when prompted. Installation is project-local by default; add
@@ -71,6 +74,9 @@ The `skills` CLI needs Node.js 22.20 or newer.
   Engine contact for access.
 - A machine you can `sudo` on (Linux) or your own Mac.
 - An agent CLI account (Claude Code today) for the board's agents.
+
+`wfe-integrate` needs only a board you can reach, and someone who can run
+`wf app invite` on it.
 
 ## License
 

@@ -1,6 +1,6 @@
 ---
 name: learn-workflow-engine
-description: Run, debug and extend a Workflow Engine board (the `wf` CLI) — a file-based orchestrator that runs AI coding CLIs (Claude Code, Codex, Gemini CLI) through YAML workflows. Teaches the mental model, the CLI, how to read a workflow, task files, hooks, plugins and extensions, the dashboard, and an ordered check for "why isn't this task moving?". Use at the start of a session where the user wants to operate, debug or extend a board on a machine that already has the engine. To write or change a board's workflows, prompts or project plugin, use the workflow-engine-author skill; to install the engine or create a first board, use the workflow-engine-setup skill.
+description: Run, debug and extend a Workflow Engine board (the `wf` CLI) — a file-based orchestrator that runs AI coding CLIs (Claude Code, Codex, Gemini CLI) through YAML workflows. Teaches the mental model, the CLI, how to read a workflow, task files, hooks, plugins and extensions, the dashboard, and an ordered check for "why isn't this task moving?". Use at the start of a session where the user wants to operate, debug or extend a board on a machine that already has the engine. To write or change a board's workflows, prompts or project plugin, use the workflow-engine-author skill; to install the engine or create a first board, use the workflow-engine-setup skill. To connect another program or AI tool to a board, use the wfe-integrate skill.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch
 ---
 
@@ -168,6 +168,18 @@ wf dashboard -w .workflow                # http://127.0.0.1:8787; --port to chan
 - **It shows** tasks grouped as active, queued, review, sign-off, blocked, done, unverified, failed, rejected and undeclared; for each task its run log, live step transcripts, artifact panels, memo and decision questions, and rubric status (status, value, message per criterion).
 - **It can** approve and reject checkpoints, run a task (which starts `wf exec`), arm and pause tasks, pause the board, and change board settings.
 - Step transcripts have credentials redacted when they are written.
+
+---
+
+## Connecting other software: the Board API
+
+The dashboard also serves a versioned API for other programs at `/api/v1`. `<url>/api/v1/` and `<url>/api/v1/contract.md` (`<url>` is the dashboard's address) explain it with no key.
+
+- **Apps.** `wf app invite <app-name> --scopes read -w .workflow` makes a one-use pairing code (`--scopes read,act` to act, under the board's automation rules). `wf app list -w .workflow` lists the paired apps, and `wf app remove <app-name> -w .workflow` cuts one off.
+- **MCP.** `wf mcp serve -w .workflow` is MCP for an AI client on this machine (`claude mcp add board -- wf mcp serve -w <workspace>`). Remote clients use `<url>/api/v1/mcp` with a key.
+- **Events.** `GET /api/v1/events` streams them. For webhooks: `wf webhook add <url> -w .workflow`, `wf webhook list -w .workflow`, `wf webhook test <id> -w .workflow` and `wf webhook deliveries -w .workflow`.
+
+When someone wants their own app, script, service or AI tool to read the board, answer its gates or hear its events, use the `wfe-integrate` skill. Code that must run inside the board is an extension (`workflow-engine-author`).
 
 ---
 
@@ -463,6 +475,7 @@ You are a senior developer on this project.
 - `wf doctor -w .workflow` — what is wrong with this board right now, with the fix.
 - `wf workflow check -w .workflow` — whether a workflow is valid.
 - `wf setup extract <dir>` — the onboarding guide (`docs/`), runnable examples (`examples/`), and the service units and env examples (`deploy/`).
+- `<board-url>/api/v1/contract.md` — the Board API's contract, served with no key.
 - [plugin-manifest.md](plugin-manifest.md) beside this skill, or `wf integration schema --markdown` — every `plugin.yaml` field.
 - The engine is a Python package (`workflow_engine`). When this guide and the code disagree, the code is right, and this guide is out of date.
 
