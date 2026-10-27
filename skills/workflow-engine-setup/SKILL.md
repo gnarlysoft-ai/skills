@@ -445,6 +445,8 @@ for need in result["needs"]:
 for line in lines:
     if line.get("type") == "step" and line.get("id") == "board.doctor" and line.get("status") in ("ok", "needs"):
         print("SIGN-OFF:", line.get("detail", ""))
+if result.get("updates"):
+    print(f'UPDATES  {result["updates"]["state"]}: {result["updates"]["detail"]}')
 print(f'exit {result["exit"]}, the {result["stage"]} pass, engine {result["version"]}')
 print("VERDICT:", "DONE" if result["done"] else "NOT YET")
 PY
@@ -455,13 +457,13 @@ PY
 | `reason` | Who owes it | What you do |
 |---|---|---|
 | `board` | you | from the machine pass: the board is left to make (steps 3 and 4). From the board pass: a viewer or a switch the user turns on with `--yes`: give them the command |
-| `admin` | the user | an admin step the installer cannot take here (this user may not use `sudo`, or Linux linger): show its exact command and what it changes; they, or the machine's owner, run it, then you run the pass again |
-| `sign-in` | the user | an AI CLI, MCP server or plugin to sign in to: the command is theirs to run (step 5) |
+| `admin` | the user | an admin step the installer cannot take here because this user may not use `sudo` (a system package, Linux linger, or the Linux updater's files): show its exact command and what it changes; they, or the machine's owner, run it (several: in order), then you run the pass again. The Linux updater's `sudoedit` of an existing `wf.env` is always theirs |
+| `sign-in` | the user | an AI CLI, MCP server or plugin to sign in to: the command is theirs to run (step 5). From the machine pass's `updater`: GitHub, which the updater reads the channel from (`gh auth status`) |
 | `tool` | the user | a tool the pass could not install or that does not work: its command installs or fixes it, often with admin rights |
 | `path` | the user | a new terminal does not find `wf`: the line to add to their shell profile (the installer never edits one) |
-| `login-session` | the user | the pass ran as root: run it as their own account, without `sudo` |
+| `login-session` | the user | the pass ran as root: run it as their own account, without `sudo`. From the machine pass's `updater` on a Mac reached only over SSH: the updater starts at their next login at the Mac's screen; nothing to run |
 | `recipe` | the lane plugin's owner | no installed plugin says how to install the item, or two disagree: report it as theirs; the user may install it by hand with the fix shown |
-| `conflict` | the user | something on the machine is in the way (another board's service or port, a newer engine, a `wf` that is not the engine's, too little disk): say what, and never move another board's things |
+| `conflict` | the user | something on the machine is in the way (another board's service or port, a newer engine, a `wf` that is not the engine's, too little disk, another account's updater): say what, and never move another board's or account's things |
 | `doctor` | depends on the row | a `wf doctor --onboarding` row that is not ok, with doctor's own fix: step 6 lists the known ones |
 | `consent` | the user | admin steps wait for one yes: show every action with `admin: true` in that pass's plan and what it changes; on their yes, run the need's command (it carries `--yes <plan id>`) |
 | `password` | the user | `sudo` needs their password and this run has no terminal: they run the need's command in their own terminal, where `sudo` asks; then you run the pass again |
@@ -593,7 +595,7 @@ Then:
 
 ```bash
 . ~/.wf-setup-myproject.env
-cd "$PKG_DIR" && sh "workflow-engine-$VERSION-install.sh" --json > ~/wf-install-myproject.machine.jsonl; echo "exit=$?"
+cd "$PKG_DIR" && sh "workflow-engine-$VERSION-install.sh" --json ${CHANNEL:+--channel "$CHANNEL"} > ~/wf-install-myproject.machine.jsonl; echo "exit=$?"
 python3 ~/.wf-setup-myproject.read.py ~/wf-install-myproject.machine.jsonl
 ```
 
@@ -607,13 +609,19 @@ If `python3` is missing, the reader cannot run, and the pass names it as a
 need too (`require.python.hook`). Read the JSON lines as they are (they carry
 no secret), have what they name installed, and run step 2 again.
 
-**Verify**: the reader's only `NEED` line is `board (board)`, and
+**Verify**: the reader's only `NEED` line is `board (board)` (on a Mac reached
+over SSH, `updater (login-session)` may stay: it clears at the user's next
+login at its screen), and
 `wf --version` prints `wf <VERSION>`.
 
-**Updates.** This version of the installer installs no updater: automatic
-updates come with its release channel option in a later version, and only for
-a channel the user names (the one their vendor gave them). Tell the user the
-engine stays at this version until then.
+**Updates.** With a channel (the one their vendor gave them, in `CHANNEL`),
+the block above passes `--channel` and the pass's last step, `updater`, turns on
+automatic updates: on a Mac it loads the updater's agent; on Linux it names the
+admin commands that install it, as `admin` needs, in order. The reader's
+`UPDATES` line says where that stands. With no channel it is `off`, and the
+engine stays at this version: tell the user so. An installer from before this
+option exits 2 naming `--channel`: run the block again without
+`${CHANNEL:+--channel "$CHANNEL"}` and tell the user the same.
 
 ## Step 3. Create the board
 
@@ -1165,9 +1173,10 @@ Known ones:
 - A plugin's onboarding probe (`doctor.<plugin>.<probe>`) is graded like a
   hook and carries the plugin's own fix. One that says it runs only with
   `--smoke` spends real runs; the board pass without `--no-smoke` runs it.
-- An `admin` need (a system package, or `board.services` saying lingering is
-  off, so the services stop at logout and do not start at boot) is the user's
-  to run in their own terminal, then run the board pass again.
+- An `admin` need (a system package, or `board.linger`: lingering is off, so
+  the services stop at logout and do not start at boot, and this user may not
+  use `sudo`) is for the user or the machine's owner to run in their own
+  terminal, then run the board pass again.
 - A `recipe` need is the lane plugin owner's: no installed plugin says how to
   install that item. Report it with its fix; the user may install it by hand.
 - A `conflict` need on `board.services` names what is in the way (another

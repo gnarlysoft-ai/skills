@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "workflow-engine",
-      "description": "Set up and run the Workflow Engine with your own AI agent: install it, create a board, prove it with wf doctor, then run, debug and extend the board.",
+      "description": "Set up and run the Workflow Engine with your own AI agent: install it, create a board, prove it with wf doctor, then run, debug and extend the board, and connect your own apps to it.",
       "source": "./"
     }
   ]
